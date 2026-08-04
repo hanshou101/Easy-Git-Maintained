@@ -18,6 +18,12 @@
   </tr>
 </table>
 
+## Maintained edition
+
+This is the independently maintained `hanshou101` edition of Easy Git. This repository is the primary source for development, releases, issue fixes, and pull-request merges. It is not downstream-gated by the original repository.
+
+The original [`Saiki77/Easy-Git`](https://github.com/Saiki77/Easy-Git) repository is retained as an `upstream` reference. Upstream changes are reviewed and selectively merged when they fit this edition; they are not pulled automatically and do not override local maintenance decisions. See [MAINTENANCE.md](MAINTENANCE.md) for the repository and remote policy.
+
 ## Why
 
 Obsidian's built-in Sync covers your whole vault. Easy Git is for the case where you want to share only one or two folders with a repo: a notes folder you keep public, course material you collaborate on, a snippets section you want backed up under version control. You pick the folder, you pick the repo, you pick the direction. That's it.
@@ -43,7 +49,7 @@ If you'd like Easy Git to reach another host such as GitLab, Bitbucket, or a dif
 **Via BRAT** (for early-access builds between releases)
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
-2. BRAT settings → **Add Beta Plugin** → paste `Saiki77/Easy-Git`.
+2. BRAT settings → **Add Beta Plugin** → paste `hanshou101/Easy-Git-Maintained`.
 3. Enable **Easy Git** under Settings → Community plugins.
 
 **Manual:** download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases) into `<your vault>/.obsidian/plugins/easy-git/`.

@@ -1,5 +1,8 @@
 export type SyncDirection = "push" | "pull" | "both";
 
+export type PushLineEndings = "preserve" | "lf";
+export type PullLineEndings = "preserve" | "crlf";
+
 export type AutoMode =
   | { kind: "off" }
   | { kind: "interval"; minutes: number }
@@ -41,6 +44,16 @@ export interface FolderMapping {
   direction: SyncDirection;
   autoMode: AutoMode;
   commitTemplate?: string;
+  /**
+   * Representation written to remote Git blobs. Undefined is treated as
+   * "preserve" so mappings saved by older plugin versions keep their behavior.
+   */
+  pushLineEndings?: PushLineEndings;
+  /**
+   * Representation written into the vault after a pull. Undefined is treated
+   * as "preserve" for backward compatibility.
+   */
+  pullLineEndings?: PullLineEndings;
   /**
    * If true, .md files are pushed with Obsidian wikilink embeds rewritten to
    * standard CommonMark image/link syntax so GitHub renders them. Undefined
@@ -289,6 +302,8 @@ export function createFolderMapping(): FolderMapping {
     vaultFolder: "",
     direction: "both",
     autoMode: { kind: "off" },
+    pushLineEndings: "preserve",
+    pullLineEndings: "preserve",
     rewriteWikilinks: false,
     destinations: [],
   };

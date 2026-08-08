@@ -51,7 +51,12 @@ import {
   applyPullRestores,
   applyPushTransforms,
 } from "./markdown-transforms";
-import { preferredLineEnding, splitLinesForMerge } from "./line-endings";
+import {
+  preparePullBuffer,
+  preparePushBuffer,
+  preferredMergeLineEnding,
+  splitLinesForMerge,
+} from "./line-endings";
 import { hasHiddenPathSegment } from "./hidden-paths";
 import { merge as diff3Merge } from "node-diff3";
 
@@ -497,11 +502,8 @@ export class SyncEngine {
     return baseResult;
   }
 
-  /**
-   * Per-sync caches for the wikilink rewriter so we don't read+rewrite each .md
-   * file twice (once during the SHA scan, once during push).
-   */
-  private rewriteContentCache: Map<string, ArrayBuffer> = new Map();
+  /** Per-sync prepared push bytes for rewritten or line-normalized text. */
+  private pushContentCache: Map<string, ArrayBuffer> = new Map();
   private attachmentSourceMap: Map<string, string> = new Map();
 
   private async scanLocalFolder(
@@ -565,7 +567,7 @@ export class SyncEngine {
     ];
     const maxBytes = this.deps.settings.maxFileSizeBytes;
 
-    this.rewriteContentCache = new Map();
+    this.pushContentCache = new Map();
     this.attachmentSourceMap = new Map();
 
     const rewriteOn = isRewriteEnabled(mapping) && mapping.direction !== "pull";
@@ -616,25 +618,21 @@ export class SyncEngine {
             for (const blob of result.extraBlobs) {
               accumulatedExtraBlobs.push(blob);
             }
-            if (finalText === text) {
-              files[relPath] = {
-                path: relPath,
-                sha: await computeGitBlobShaFromArrayBuffer(sourceBuffer),
-                size: sourceBuffer.byteLength,
-                mtime: child.stat.mtime,
-              };
-            } else {
-              const finalBuffer = encodeUtf8(finalText, decoded.hasBom);
-              this.rewriteContentCache.set(relPath, finalBuffer);
-              files[relPath] = {
-                path: relPath,
-                sha: await computeGitBlobShaFromArrayBuffer(finalBuffer),
-                size: finalBuffer.byteLength,
-                mtime: child.stat.mtime,
-              };
+            const transformedBuffer = finalText === text
+              ? sourceBuffer
+              : encodeUtf8(finalText, decoded.hasBom);
+            const pushBuffer = preparePushBuffer(mapping, relPath, transformedBuffer);
+            if (transformedBuffer !== sourceBuffer || pushBuffer !== sourceBuffer) {
+              this.pushContentCache.set(relPath, pushBuffer);
             }
+            files[relPath] = {
+              path: relPath,
+              sha: await computeGitBlobShaFromArrayBuffer(pushBuffer),
+              size: pushBuffer.byteLength,
+              mtime: child.stat.mtime,
+            };
           } else {
-            const sha = await this.computeLocalSha(child);
+            const sha = await this.computeLocalSha(child, mapping, relPath);
             files[relPath] = {
               path: relPath,
               sha,
@@ -670,7 +668,7 @@ export class SyncEngine {
         skipped.push(blob.remoteRelPath);
         continue;
       }
-      const sha = await this.computeLocalSha(sourceFile);
+      const sha = await this.computeLocalSha(sourceFile, mapping, blob.remoteRelPath);
       files[blob.remoteRelPath] = {
         path: blob.remoteRelPath,
         sha,
@@ -766,17 +764,20 @@ export class SyncEngine {
         await this.backupVaultFile(mapping, vaultPath, backupTimestamp);
 
         const mergedText = result.result.join(
-          preferredLineEnding(localText, baseText, remoteText),
+          preferredMergeLineEnding(mapping, c.path, localText, baseText, remoteText),
         );
         const mergedBuffer = encodeUtf8(mergedText, localDecoded.hasBom);
-        await this.deps.app.vault.modifyBinary(file, mergedBuffer);
+        const vaultBuffer = preparePullBuffer(mapping, c.path, mergedBuffer);
+        await this.deps.app.vault.modifyBinary(file, vaultBuffer);
 
-        // Update the in-memory local scan so push-modify reads the new SHA.
-        const newSha = await computeGitBlobShaFromArrayBuffer(mergedBuffer);
+        // The scan and upload must agree on the canonical Git blob bytes even
+        // when the vault copy is written with CRLF.
+        const pushBuffer = preparePushBuffer(mapping, c.path, vaultBuffer);
+        const newSha = await computeGitBlobShaFromArrayBuffer(pushBuffer);
         localFiles[c.path] = {
           path: c.path,
           sha: newSha,
-          size: mergedBuffer.byteLength,
+          size: pushBuffer.byteLength,
           mtime: Date.now(),
         };
 
@@ -916,9 +917,13 @@ export class SyncEngine {
     };
   }
 
-  private async computeLocalSha(file: TFile): Promise<string> {
+  private async computeLocalSha(
+    file: TFile,
+    mapping: FolderMapping,
+    relPath: string,
+  ): Promise<string> {
     const buf = await this.deps.app.vault.readBinary(file);
-    return computeGitBlobShaFromArrayBuffer(buf);
+    return computeGitBlobShaFromArrayBuffer(preparePushBuffer(mapping, relPath, buf));
   }
 
   /**
@@ -1003,7 +1008,8 @@ export class SyncEngine {
         let sha: string;
         try {
           const buf = await adapter.readBinary(filePath);
-          sha = await computeGitBlobShaFromArrayBuffer(buf);
+          const pushBuffer = preparePushBuffer(mapping, relPath, buf);
+          sha = await computeGitBlobShaFromArrayBuffer(pushBuffer);
         } catch {
           continue;
         }
@@ -1057,9 +1063,10 @@ export class SyncEngine {
           if (restored.highlightsRestored > 0) counts.highlightsRestored = restored.highlightsRestored;
           if (restored.mathMacrosRestored > 0) counts.mathMacrosRestored = restored.mathMacrosRestored;
         }
-        const outputBuffer = text === decoded.text
+        const restoredBuffer = text === decoded.text
           ? sourceBuffer
           : encodeUtf8(text, decoded.hasBom);
+        const outputBuffer = preparePullBuffer(mapping, action.path, restoredBuffer);
         if (existing) {
           await this.deps.app.vault.modifyBinary(existing, outputBuffer);
         } else {
@@ -1310,7 +1317,7 @@ export class SyncEngine {
     relPath: string,
   ): Promise<{ base64: string }> {
     // Cached rewritten markdown content (computed during scan).
-    const cached = this.rewriteContentCache.get(relPath);
+    const cached = this.pushContentCache.get(relPath);
     if (cached !== undefined) {
       return { base64: arrayBufferToBase64(cached) };
     }
@@ -1322,7 +1329,9 @@ export class SyncEngine {
         throw new Error(`Attachment source not found: ${attachmentSource}`);
       }
       const buf = await this.deps.app.vault.readBinary(sourceFile);
-      return { base64: arrayBufferToBase64(buf) };
+      return {
+        base64: arrayBufferToBase64(preparePushBuffer(mapping, relPath, buf)),
+      };
     }
 
     const fullPath = vaultPathFor(mapping, relPath);
@@ -1333,10 +1342,14 @@ export class SyncEngine {
         throw new Error(`Vault file not found: ${fullPath}`);
       }
       const buf = await adapter.readBinary(fullPath);
-      return { base64: arrayBufferToBase64(buf) };
+      return {
+        base64: arrayBufferToBase64(preparePushBuffer(mapping, relPath, buf)),
+      };
     }
     const buf = await this.deps.app.vault.readBinary(file);
-    return { base64: arrayBufferToBase64(buf) };
+    return {
+      base64: arrayBufferToBase64(preparePushBuffer(mapping, relPath, buf)),
+    };
   }
 }
 

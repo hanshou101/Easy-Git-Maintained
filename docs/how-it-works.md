@@ -10,11 +10,11 @@ Per run, the engine does the following in order:
 
 1. **Pin the remote head.** Fetch the branch's current commit SHA and root tree SHA. Everything that follows reads from this snapshot. If someone else pushes mid-run, the snapshot won't shift under us — we'll find out at step 8.
 2. **Walk the remote folder.** Resolve the mapping's remote folder inside the pinned tree, then fetch its subtree recursively. The result is a flat `{path → blob SHA}` map for the remote side.
-3. **Walk the local folder.** Read every file under the mapping's vault folder, filtered by the global exclude list and the mapping's `.easygitignore`. For each file, compute its git blob SHA (more on that below). If wikilink rewriting is on and the direction isn't pull-only, rewrite `.md` files in memory and track any out-of-folder attachments that need to ride along.
+3. **Walk the local folder.** Read every file under the mapping's vault folder, filtered by the global exclude list and the mapping's `.easygitignore`. Apply the mapping's in-memory push representation, then compute the Git blob SHA from those exact outgoing bytes (more on that below). If wikilink rewriting is on and the direction isn't pull-only, rewrite `.md` files in memory and track any out-of-folder attachments that need to ride along.
 4. **Load last-known state.** Each mapping persists the `{path → SHA}` map from the last successful sync. This is the three-way merge base.
 5. **Classify.** For every path that appears in local, remote, or the last-known map, decide what action it implies (push-add, pull-modify, push-delete, conflict, …). The mapping's direction (push, pull, both) gates which actions actually run; the others become informational notices.
 6. **Resolve conflicts.** If there are any, show the conflict modal and wait. Cancelling aborts the run cleanly — nothing is touched on either side.
-7. **Apply pull actions.** Fetch and write blobs for pull-add / pull-modify; delete files for pull-delete. This happens locally only; no network writes yet.
+7. **Apply pull actions.** Fetch blobs for pull-add / pull-modify, apply the mapping's vault-side line-ending representation, and write them locally; delete files for pull-delete. This happens locally only; no network writes yet.
 8. **Build and push the commit.** If any push actions exist, create blobs, build a new tree, build a commit on top of the pinned head, then atomically update the branch ref with non-fast-forward protection. If the ref update is rejected because someone else pushed in the meantime, the whole run retries from step 1 with exponential backoff (1s, 3s, 9s, up to 3 attempts).
 9. **Persist the new last-known state.** The mapping's `lastSyncState` is replaced wholesale with the final `{path → SHA}` map, and `lastSyncAt` is updated.
 
@@ -29,7 +29,20 @@ That's load-bearing for two reasons:
 - **Comparison without download.** We compare local and remote by SHA without fetching remote file contents. A 200-MB repo with 500 files costs one tree listing, not 500 GETs.
 - **Conflict detection without timestamps.** Nothing in the algorithm looks at modification time. If two SHAs match, the bytes match. If they differ, the bytes differ. mtime is unreliable across syncs, syncs across machines, and across the OAuth Device Flow round-trip; SHA-1 is not.
 
-Text files (`.md`, code, configs, README/LICENSE/CHANGELOG) are read as UTF-8 and re-encoded with `TextEncoder` before hashing so line-ending normalization doesn't change the SHA. Binary files use raw bytes.
+The hash input is always the exact blob payload Easy Git will upload. With the default push policy, that is the vault's raw bytes. With push normalization set to LF, likely text files (`.md`, code, configs, README/LICENSE/CHANGELOG) are decoded as UTF-8, normalized in memory, re-encoded with their UTF-8 BOM preserved, and then hashed. Binary files always use raw bytes.
+
+## Working-tree and repository line endings
+
+Git normally separates a repository's canonical representation from a platform-specific working copy. Easy Git writes Git objects directly through the hosting API, so it cannot rely on `core.autocrlf` or `.gitattributes` to perform that conversion.
+
+The per-mapping policies make the boundary explicit:
+
+- **Push `preserve`** (default) hashes and uploads vault bytes unchanged.
+- **Push `lf`** converts line separators to LF only for likely text paths, in memory. It never rewrites the vault file merely to upload it. Local scanning uses the same converted bytes for SHA calculation, so a CRLF working copy matches the LF blob on the next sync instead of appearing modified forever.
+- **Pull `preserve`** (default) writes the remote blob unchanged.
+- **Pull `crlf`** converts likely text paths to CRLF before writing the vault copy.
+
+UTF-8 BOMs survive either conversion and binary paths bypass both. A Windows vault that is also a Git working tree will usually use push `lf` plus pull `crlf`: the repository stays canonical LF while the disk copy stays CRLF.
 
 ## Classification
 

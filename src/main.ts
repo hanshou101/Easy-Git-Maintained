@@ -456,6 +456,22 @@ export default class EasyGitPlugin extends Plugin {
         m.direction = "both";
         dirty = true;
       }
+      if (
+        m.pushLineEndings !== undefined &&
+        m.pushLineEndings !== "preserve" &&
+        m.pushLineEndings !== "lf"
+      ) {
+        m.pushLineEndings = "preserve";
+        dirty = true;
+      }
+      if (
+        m.pullLineEndings !== undefined &&
+        m.pullLineEndings !== "preserve" &&
+        m.pullLineEndings !== "crlf"
+      ) {
+        m.pullLineEndings = "preserve";
+        dirty = true;
+      }
       // Coerce a hand-edited paused flag to a real boolean.
       if (m.paused !== undefined && typeof m.paused !== "boolean") {
         m.paused = !!m.paused;

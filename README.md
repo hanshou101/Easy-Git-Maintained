@@ -65,11 +65,16 @@ Either works for private repos.
 
 ## Line endings
 
-Easy Git uploads Git blobs through the hosting API; it does not run a local Git checkout. Files that do not require Markdown rewriting are read as raw bytes, so CRLF and LF remain distinct and are uploaded unchanged. When Markdown rewrites are enabled, Easy Git preserves the document's existing line separators while rewriting wikilinks, callouts, highlights, or math syntax.
+Easy Git uploads Git blobs through the hosting API; it does not run a local Git checkout or apply `.gitattributes` itself. Each mapping therefore has explicit push and pull line-ending policies:
+
+- **Push: Preserve vault bytes** is the backward-compatible default. **Normalize text blobs to LF** converts likely text files in memory before hashing and upload; the vault copy is not changed. Use LF when the mapped vault folder is also a Git working tree.
+- **Pull: Preserve remote bytes** is the backward-compatible default. **Write text files with CRLF** creates a Windows-style vault copy while leaving the remote blob unchanged.
+
+For a Windows Git working tree whose repository stores canonical LF blobs, select push **LF** and pull **CRLF**. Both policies leave binary files untouched and preserve UTF-8 BOMs.
 
 ## Add a folder mapping
 
-Settings → Easy Git → **+ Add mapping**. Pick the vault folder (or the vault root for whole-vault sync), add one or more destinations (each = repo + branch + path inside the repo), the direction (push only, pull only, or both), and how often to sync (manual, on interval, on startup, or on save). Save.
+Settings → Easy Git → **+ Add mapping**. Pick the vault folder (or the vault root for whole-vault sync), add one or more destinations (each = repo + branch + path inside the repo), the direction (push only, pull only, or both), line-ending policies, and how often to sync (manual, on interval, on startup, or on save). Save.
 
 If you rename or move the mapping's folder inside Obsidian later, Easy Git updates the mapping path automatically and shows a Notice. If the folder is missing entirely (deleted, or moved while Obsidian was closed), the next sync aborts with a clear error instead of interpreting the missing folder as "delete everything on the remote."
 

@@ -8,6 +8,8 @@ import {
   GitHubAuth,
   MappingDestination,
   PluginSettings,
+  PullLineEndings,
+  PushLineEndings,
   SyncDirection,
   createFolderMapping,
   makeId,
@@ -150,6 +152,40 @@ export class EditMappingModal extends Modal {
           })
           .setValue(this.mapping.direction)
           .onChange((v) => (this.mapping.direction = v as SyncDirection)),
+      );
+
+    new Setting(contentEl)
+      .setName("Push line endings")
+      .setDesc(
+        "Controls text blobs sent to the remote without changing vault files. Choose LF when this vault folder is also a Git working tree.",
+      )
+      .addDropdown((d) =>
+        d
+          .addOptions({
+            preserve: "Preserve vault bytes (default)",
+            lf: "Normalize text blobs to LF (recommended for Git worktrees)",
+          })
+          .setValue(this.mapping.pushLineEndings ?? "preserve")
+          .onChange((v) => {
+            this.mapping.pushLineEndings = v as PushLineEndings;
+          }),
+      );
+
+    new Setting(contentEl)
+      .setName("Pull line endings")
+      .setDesc(
+        "Controls text files written into the vault after a pull. Choose CRLF for a Windows-style working copy; remote Git blobs remain unchanged.",
+      )
+      .addDropdown((d) =>
+        d
+          .addOptions({
+            preserve: "Preserve remote bytes (default)",
+            crlf: "Write text files with CRLF (Windows)",
+          })
+          .setValue(this.mapping.pullLineEndings ?? "preserve")
+          .onChange((v) => {
+            this.mapping.pullLineEndings = v as PullLineEndings;
+          }),
       );
 
     new Setting(contentEl)

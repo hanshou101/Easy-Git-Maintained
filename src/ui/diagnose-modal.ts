@@ -43,6 +43,8 @@ interface DiagnosticReport {
     direction: string;
     vaultFolder: string;
     autoMode: string;
+    pushLineEndings: string;
+    pullLineEndings: string;
     rewriteWikilinks: string;
     destinationCount: number;
   };
@@ -258,6 +260,8 @@ export class DiagnoseModal extends Modal {
         direction: mapping.direction,
         vaultFolder: mapping.vaultFolder || "(whole vault)",
         autoMode: this.formatAutoMode(mapping),
+        pushLineEndings: mapping.pushLineEndings ?? "preserve",
+        pullLineEndings: mapping.pullLineEndings ?? "preserve",
         rewriteWikilinks:
           mapping.rewriteWikilinks === false
             ? "off"
@@ -564,6 +568,8 @@ export class DiagnoseModal extends Modal {
       Direction: r.mapping.direction,
       "Vault folder": r.mapping.vaultFolder,
       "Auto mode": r.mapping.autoMode,
+      "Push line endings": r.mapping.pushLineEndings,
+      "Pull line endings": r.mapping.pullLineEndings,
       "Wikilink rewrite": r.mapping.rewriteWikilinks,
       Destinations: String(r.mapping.destinationCount),
     });
@@ -837,6 +843,8 @@ export class DiagnoseModal extends Modal {
     kv("Direction", r.mapping.direction);
     kv("Vault folder", r.mapping.vaultFolder);
     kv("Auto mode", r.mapping.autoMode);
+    kv("Push line endings", r.mapping.pushLineEndings);
+    kv("Pull line endings", r.mapping.pullLineEndings);
     kv("Wikilink rewrite", r.mapping.rewriteWikilinks);
     kv("Destinations", String(r.mapping.destinationCount));
     lines.push("");

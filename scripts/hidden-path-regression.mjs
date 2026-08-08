@@ -7,8 +7,13 @@ import { requestBodies, TFolder } from "obsidian";
 import { startDeviceFlow } from "./src/github/auth";
 import { GitHubApiError } from "./src/github/client";
 import { createTree } from "./src/github/git-data";
+import { classify } from "./src/sync/classifier";
 import { SyncEngine, isRewriteEnabled } from "./src/sync/engine";
-import { base64ToArrayBuffer } from "./src/sync/blob-sha";
+import {
+  base64ToArrayBuffer,
+  computeGitBlobShaFromArrayBuffer,
+  decodeUtf8,
+} from "./src/sync/blob-sha";
 import { createFolderMapping } from "./src/types";
 
 const encoder = new TextEncoder();
@@ -19,6 +24,8 @@ assert.equal(
   false,
   "New folder mappings must default the GitHub rendering pass to off",
 );
+assert.equal(createFolderMapping().pushLineEndings, "preserve");
+assert.equal(createFolderMapping().pullLineEndings, "preserve");
 assert.equal(
   isRewriteEnabled({ rewriteWikilinks: undefined } as any),
   false,
@@ -178,6 +185,61 @@ assert.deepEqual(
   new Uint8Array(base64ToArrayBuffer(upload.base64)),
   originalGitignore,
   "Hidden-file upload must preserve the original CRLF bytes",
+);
+
+const lfMapping = { ...mapping, pushLineEndings: "lf" };
+const lfScanned: Record<string, any> = {};
+await engine.augmentScanWithHiddenPaths(
+  root,
+  lfMapping,
+  lfScanned,
+  [".git/**", ".easy-git-backup/**"],
+  1024 * 1024,
+);
+const lfUpload = await engine.readVaultFile(lfMapping, ".gitignore");
+const lfUploadBuffer = base64ToArrayBuffer(lfUpload.base64);
+assert.equal(
+  decodeUtf8(lfUploadBuffer).text,
+  "dist/\\n.cache/\\n",
+  "LF policy must normalize a hidden text file before upload",
+);
+assert.deepEqual(
+  adapter.files.get(".gitignore"),
+  originalGitignore,
+  "LF push policy must leave the hidden vault file as CRLF",
+);
+const lfSha = await computeGitBlobShaFromArrayBuffer(lfUploadBuffer);
+assert.equal(
+  lfScanned[".gitignore"].sha,
+  lfSha,
+  "Hidden-path scan SHA must match the normalized upload blob",
+);
+app.vault.readBinary = async () => originalGitignore.slice().buffer;
+assert.equal(
+  await engine.computeLocalSha({ path: "notes/example.md" }, lfMapping, "example.md"),
+  lfSha,
+  "The normal vault scan must hash LF-normalized bytes",
+);
+const secondHiddenSync = classify({
+  local: { ".gitignore": lfScanned[".gitignore"] },
+  remote: {
+    ".gitignore": {
+      path: ".gitignore",
+      sha: lfSha,
+      size: lfUploadBuffer.byteLength,
+    },
+  },
+  lastState: {
+    ".gitignore": { sha: lfSha, size: lfUploadBuffer.byteLength, mtime: 2 },
+  },
+  direction: "both",
+});
+assert.equal(secondHiddenSync.actions.length, 0);
+assert.equal(secondHiddenSync.conflicts.length, 0);
+assert.equal(
+  secondHiddenSync.noopCount,
+  1,
+  "A second hidden-file sync must not report the unchanged CRLF file as modified",
 );
 
 await engine.backupVaultFile(mapping, ".gitignore", "2026-08-04-000000");

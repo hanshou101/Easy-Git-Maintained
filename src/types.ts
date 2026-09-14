@@ -220,11 +220,11 @@ export interface SyncResult {
   error?: string;
   durationMs: number;
   skippedLarge?: string[];
-  /** Vault-relative roots of embedded git repositories (declared
-   * submodules, manually cloned repos, linked worktrees) detected under
-   * the mapping folder this run. Git tracks them as gitlinks, never as
-   * files, so Easy Git excludes their contents on both sides. */
-  ignoredEmbeddedRepos?: string[];
+  /** Vault-absolute submodule directories declared in the
+   * `.gitmodules` of a repo at or below the mapping folder this run.
+   * They stay invisible to this mapping's sync on both sides; each is
+   * synced through its own mapping instead. */
+  ignoredSubmodules?: string[];
   noopReason?: string;
   /** Number of wikilinks that could not be resolved at push time. */
   unresolvedWikilinks?: number;

@@ -89,54 +89,64 @@ function makeEnv(rootFolder: any, getFolderByPath: (p: string) => any, adapter: 
 }
 
 // ---------------------------------------------------------------------------
-// Scenario 1: the AME-525 report — whole-vault mapping of a repo that
-// declares a submodule, where the user cloned the sub-repo into the
-// submodule path by hand. Neither the sub-repo's working tree nor its
-// .git internals may be scanned; parent-repo dotfiles (.gitignore,
-// .gitmodules) must still sync. A nested repo two levels down
-// (libs/nested-sub) must be caught without flagging its parent.
+// Scenario 1: the user's real topology — a whole-vault mapping over a
+// plain library folder that CONTAINS the 2A-META repo. The repo carries
+// .git and a .gitmodules declaring the Multica平台产物导出 submodule, which the
+// user pulled by hand (it has .git and its own .gitmodules with a
+// grandchild). Contract: ONLY .gitmodules-declared dirs are excluded;
+// the repo's own files (and an undeclared nested repo's worktree) still
+// sync; .git internals never do. Whole-vault sync must NOT drop 2A-META.
 // ---------------------------------------------------------------------------
-const exportNote = fileOf("Multica平台产物导出/export-note.md", bytes("sub repo note"));
 const root = folderOf("", [
   fileOf("note.md", bytes("vault note")),
-  folderOf("Multica平台产物导出", [exportNote]),
-  folderOf("libs", [folderOf("libs/nested-sub", [fileOf("libs/nested-sub/nested.md", bytes("nested"))])]),
+  folderOf("2A-META", [
+    fileOf("2A-META/note.md", bytes("repo note")),
+    folderOf("2A-META/Multica平台产物导出", [
+      fileOf("2A-META/Multica平台产物导出/export-note.md", bytes("sub repo note")),
+      folderOf("2A-META/Multica平台产物导出/gc", [
+        fileOf("2A-META/Multica平台产物导出/gc/inner.md", bytes("grandchild")),
+      ]),
+    ]),
+  ]),
+  folderOf("libs", [
+    folderOf("libs/nested-sub", [fileOf("libs/nested-sub/nested.md", bytes("nested"))]),
+  ]),
 ]);
 const adapter1 = new MemoryAdapter(
   {
     "note.md": "vault note",
     ".gitignore": "node_modules/",
-    ".gitmodules": "[submodule export]\\n path = Multica平台产物导出",
-    "Multica平台产物导出/export-note.md": "sub repo note",
-    "Multica平台产物导出/.gitignore": "dist/",
-    "Multica平台产物导出/.git/config": "[core]",
-    "Multica平台产物导出/.git/objects/pack/pack-abc.pack": "PACK...",
+    "2A-META/note.md": "repo note",
+    "2A-META/.gitmodules": '[submodule "export"]\\n\\tpath = Multica平台产物导出\\n\\turl = ../export.git',
+    "2A-META/.git/HEAD": "ref: refs/heads/main",
+    "2A-META/Multica平台产物导出/export-note.md": "sub repo note",
+    "2A-META/Multica平台产物导出/.gitmodules": '[submodule "gc"]\\npath = gc\\nurl = ../gc.git',
+    "2A-META/Multica平台产物导出/.git/HEAD": "ref: refs/heads/main",
+    "2A-META/Multica平台产物导出/gc/inner.md": "grandchild",
+    "2A-META/Multica平台产物导出/gc/.git/HEAD": "ref: refs/heads/main",
     "libs/nested-sub/nested.md": "nested",
     "libs/nested-sub/.git/HEAD": "ref: refs/heads/main",
   },
   {
-    "/": {
-      files: [".gitignore", ".gitmodules"],
-      folders: [".git", "Multica平台产物导出", "libs", ".hidden-clone"],
+    "/": { files: [".gitignore", "note.md"], folders: ["2A-META", "libs"] },
+    "2A-META": {
+      files: ["2A-META/note.md", "2A-META/.gitmodules"],
+      folders: ["2A-META/.git", "2A-META/Multica平台产物导出"],
     },
-    ".git": { files: [".git/config"], folders: [] },
-    "Multica平台产物导出": {
-      files: ["Multica平台产物导出/export-note.md", "Multica平台产物导出/.gitignore"],
-      folders: ["Multica平台产物导出/.git"],
+    "2A-META/.git": { files: ["2A-META/.git/HEAD"], folders: [] },
+    "2A-META/Multica平台产物导出": {
+      files: ["2A-META/Multica平台产物导出/export-note.md", "2A-META/Multica平台产物导出/.gitmodules"],
+      folders: ["2A-META/Multica平台产物导出/.git", "2A-META/Multica平台产物导出/gc"],
     },
-    "Multica平台产物导出/.git": {
-      files: ["Multica平台产物导出/.git/config"],
-      folders: ["Multica平台产物导出/.git/objects"],
+    "2A-META/Multica平台产物导出/.git": { files: ["2A-META/Multica平台产物导出/.git/HEAD"], folders: [] },
+    "2A-META/Multica平台产物导出/gc": {
+      files: ["2A-META/Multica平台产物导出/gc/inner.md"],
+      folders: ["2A-META/Multica平台产物导出/gc/.git"],
     },
-    "Multica平台产物导出/.git/objects": {
-      files: ["Multica平台产物导出/.git/objects/pack/pack-abc.pack"],
-      folders: [],
-    },
+    "2A-META/Multica平台产物导出/gc/.git": { files: ["2A-META/Multica平台产物导出/gc/.git/HEAD"], folders: [] },
     libs: { files: [], folders: ["libs/nested-sub"] },
     "libs/nested-sub": { files: ["libs/nested-sub/nested.md"], folders: ["libs/nested-sub/.git"] },
     "libs/nested-sub/.git": { files: ["libs/nested-sub/.git/HEAD"], folders: [] },
-    ".hidden-clone": { files: [".hidden-clone/data.json"], folders: [".hidden-clone/.git"] },
-    ".hidden-clone/.git": { files: [".hidden-clone/.git/HEAD"], folders: [] },
   },
 );
 const engine1 = makeEnv(root, () => null, adapter1);
@@ -150,89 +160,142 @@ const mapping1: any = {
 const scan1 = await engine1.scanLocalFolder(mapping1);
 
 assert.deepEqual(
-  scan1.ignoredEmbeddedRepos.slice().sort(),
-  ["Multica平台产物导出", "libs/nested-sub"],
-  "The cloned submodule folder and the nested repo must be reported as embedded repo roots, not their parents",
+  scan1.ignoredSubmodules,
+  ["2A-META/Multica平台产物导出"],
+  "Only the .gitmodules-declared submodule dir is reported, not the repo itself and not undeclared repos",
 );
 assert.deepEqual(
   Object.keys(scan1.files).sort(),
-  [".gitignore", ".gitmodules", "note.md"],
-  "Only parent-repo content may be scanned: no submodule worktree files, no .git internals, no hidden clone files",
+  [".gitignore", "2A-META/.gitmodules", "2A-META/note.md", "libs/nested-sub/nested.md", "note.md"],
+  "Repo files, parent dotfiles and undeclared-repo worktree files sync; submodule and grandchild files and all .git internals do not",
 );
 assert.ok(
-  scan1.excludePatterns.includes("Multica平台产物导出/**"),
-  "The embedded repo root must become an exclude pattern",
-);
-assert.ok(
-  !scan1.excludePatterns.includes("libs/**"),
-  "A folder merely containing a repo must stay syncable",
+  !scan1.excludePatterns.includes("2A-META/**"),
+  "The repo itself must stay a sync target — .git presence is not an exclusion",
 );
 assert.equal(
-  isExcluded("Multica平台产物导出/export-note.md", scan1.excludePatterns),
+  isExcluded("2A-META/Multica平台产物导出/export-note.md", scan1.excludePatterns),
   true,
-  "Remote-side filter space: submodule paths must be excluded so they are invisible on both sides",
+  "Declared submodule paths must be excluded in remote-relative space for the runOnce filter",
 );
 assert.equal(
-  isExcluded("libs/nested-sub/nested.md", scan1.excludePatterns),
-  true,
-  "Nested repo paths must be excluded in repo-relative space too",
+  isExcluded("2A-META/note.md", scan1.excludePatterns),
+  false,
+  "Repo files must stay syncable",
 );
-assert.equal(isExcluded("note.md", scan1.excludePatterns), false, "Normal files must stay syncable");
 
 // ---------------------------------------------------------------------------
-// Scenario 2: mapping points at a subfolder ("sub") that contains a
-// cloned repo ("sub/mod"). Patterns must cover the mapping-relative
-// space the remote-path filter matches against, and a .git directory
-// inside the mapping root itself must never leak either.
+// Scenario 2: mapping root IS the repo (Easy Git maps 2A-META directly).
+// Its own files sync; only its declared submodule dir is excluded, in
+// both the vault-absolute and the mapping-relative pattern space.
 // ---------------------------------------------------------------------------
-const subFolder = folderOf("sub", [
-  fileOf("sub/other.md", bytes("other")),
-  folderOf("sub/mod", [fileOf("sub/mod/inner.md", bytes("inner"))]),
+const repoFolder = folderOf("2A-META", [
+  fileOf("2A-META/note.md", bytes("repo note")),
+  folderOf("2A-META/Multica平台产物导出", [
+    fileOf("2A-META/Multica平台产物导出/export-note.md", bytes("sub repo note")),
+  ]),
 ]);
 const adapter2 = new MemoryAdapter(
   {
-    "sub/other.md": "other",
-    "sub/mod/inner.md": "inner",
-    "sub/mod/.git/config": "[core]",
-    "sub/.git/config": "[core]",
+    "2A-META/note.md": "repo note",
+    "2A-META/.gitmodules": '[submodule "export"]\\npath = Multica平台产物导出\\nurl = ../export.git',
+    "2A-META/.git/HEAD": "ref: refs/heads/main",
+    "2A-META/Multica平台产物导出/export-note.md": "sub repo note",
+    "2A-META/Multica平台产物导出/.git/HEAD": "ref: refs/heads/main",
   },
   {
-    sub: { files: ["sub/other.md"], folders: ["sub/mod", "sub/.git"] },
-    "sub/mod": { files: ["sub/mod/inner.md"], folders: ["sub/mod/.git"] },
-    "sub/mod/.git": { files: ["sub/mod/.git/config"], folders: [] },
-    "sub/.git": { files: ["sub/.git/config"], folders: [] },
+    "2A-META": {
+      files: ["2A-META/note.md", "2A-META/.gitmodules"],
+      folders: ["2A-META/.git", "2A-META/Multica平台产物导出"],
+    },
+    "2A-META/.git": { files: ["2A-META/.git/HEAD"], folders: [] },
+    "2A-META/Multica平台产物导出": {
+      files: ["2A-META/Multica平台产物导出/export-note.md"],
+      folders: ["2A-META/Multica平台产物导出/.git"],
+    },
+    "2A-META/Multica平台产物导出/.git": { files: ["2A-META/Multica平台产物导出/.git/HEAD"], folders: [] },
   },
 );
-const engine2 = makeEnv(null, (p: string) => (p === "sub" ? subFolder : null), adapter2);
+const engine2 = makeEnv(null, (p: string) => (p === "2A-META" ? repoFolder : null), adapter2);
 const mapping2: any = {
   id: "m2",
-  name: "Subfolder mapping",
-  vaultFolder: "sub",
+  name: "Repo mapping",
+  vaultFolder: "2A-META",
   direction: "both",
   destinations: [],
 };
 const scan2 = await engine2.scanLocalFolder(mapping2);
 
 assert.deepEqual(
-  scan2.ignoredEmbeddedRepos,
-  ["sub/mod"],
-  "A repo cloned inside the mapped subfolder must be detected with its vault-absolute path",
+  scan2.ignoredSubmodules,
+  ["2A-META/Multica平台产物导出"],
+  "The mapping root being a repo with .git must still be walked for its .gitmodules",
 );
 assert.deepEqual(
   Object.keys(scan2.files).sort(),
-  ["other.md"],
-  "Only mapping-folder files may be scanned: no repo worktree, no .git of the repo or of the mapping root",
+  [".gitmodules", "note.md"],
+  "Mapping-root repo files (including its own .gitmodules) sync; declared submodule files do not",
 );
 assert.ok(
-  scan2.excludePatterns.includes("sub/mod/**") && scan2.excludePatterns.includes("mod/**"),
+  scan2.excludePatterns.includes("2A-META/Multica平台产物导出/**") &&
+    scan2.excludePatterns.includes("Multica平台产物导出/**"),
   "Non-root mappings need both the vault-absolute and the mapping-relative pattern",
 );
-assert.equal(
-  isExcluded("mod/inner.md", scan2.excludePatterns),
-  true,
-  "Remote paths are repo-relative relative to the mapping folder, so mod/** must exclude them",
+assert.equal(isExcluded("note.md", scan2.excludePatterns), false, "Mapping-root files must stay syncable");
+
+// ---------------------------------------------------------------------------
+// Scenario 3: the mapping root IS a pulled submodule (the user maps the
+// sub-repo directly). Its .git is a FILE (gitlink pointer); its own
+// files sync; only its OWN declared submodules (grandchildren) are
+// excluded. Applying the same rule here must not block the mapping.
+// ---------------------------------------------------------------------------
+const subFolder = folderOf("sub", [
+  fileOf("sub/data.md", bytes("data")),
+  folderOf("sub/gc", [fileOf("sub/gc/inner.md", bytes("grandchild"))]),
+]);
+const adapter3 = new MemoryAdapter(
+  {
+    "sub/data.md": "data",
+    "sub/.gitmodules": '[submodule "gc"]\\npath = gc\\nurl = ../gc.git',
+    "sub/.git": "gitdir: ../.git/modules/sub",
+    "sub/gc/inner.md": "grandchild",
+    "sub/gc/.git/HEAD": "ref: refs/heads/main",
+  },
+  {
+    sub: { files: ["sub/data.md", "sub/.gitmodules", "sub/.git"], folders: ["sub/gc"] },
+    "sub/gc": { files: ["sub/gc/inner.md"], folders: ["sub/gc/.git"] },
+    "sub/gc/.git": { files: ["sub/gc/.git/HEAD"], folders: [] },
+  },
 );
-assert.equal(isExcluded("other.md", scan2.excludePatterns), false, "Mapping-root files must stay syncable");
+const engine3 = makeEnv(null, (p: string) => (p === "sub" ? subFolder : null), adapter3);
+const mapping3: any = {
+  id: "m3",
+  name: "Submodule mapping",
+  vaultFolder: "sub",
+  direction: "both",
+  destinations: [],
+};
+const scan3 = await engine3.scanLocalFolder(mapping3);
+
+assert.deepEqual(
+  scan3.ignoredSubmodules,
+  ["sub/gc"],
+  "A submodule mapped directly still excludes only its own declared children",
+);
+assert.deepEqual(
+  Object.keys(scan3.files).sort(),
+  [".gitmodules", "data.md"],
+  "Submodule worktree files sync through their own mapping; grandchild files and the .git pointer file do not",
+);
+assert.ok(
+  scan3.excludePatterns.includes("sub/gc/**") && scan3.excludePatterns.includes("gc/**"),
+  "Both pattern spaces are needed for the remote-path filter",
+);
+assert.equal(
+  isExcluded("gc/inner.md", scan3.excludePatterns),
+  true,
+  "Grandchild paths must be excluded in mapping-relative space",
+);
 `;
 
 const result = await esbuild.build({

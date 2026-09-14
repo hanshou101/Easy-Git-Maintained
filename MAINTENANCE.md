@@ -12,6 +12,8 @@ This repository is an independent, long-lived maintained edition of Easy Git.
 
 This repository is consumed as `submodules/Easy-Git` by [`hanshou101/Awesome_ObsidianPlugin_HugeRepo`](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo). Before work that can affect builds, releases, the submodule pointer, or installable artifacts, maintainers and agents must also read the HugeRepo [Submodule integration contract](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo/blob/main/SUBMODULE_INTEGRATION.md).
 
+**Definition of done.** An Easy-Git change is not finished when its PR merges here. The release completes only after the follow-up HugeRepo PR has advanced `submodules/Easy-Git` to the merged commit and regenerated `dist/Easy-Git/`. Agents must plan for that half of the work from the start: **check out `hanshou101/Awesome_ObsidianPlugin_HugeRepo` first** — it consumes this repository as `submodules/Easy-Git`, which is exactly how the integration side sees every change — read its `SUBMODULE_INTEGRATION.md`, and keep the HugeRepo update ready to run immediately after the merge. Never publish `dist/` artifacts from an unmerged branch of this repository.
+
 The repository boundary is deliberate:
 
 - Easy-Git-Maintained owns source, tests, releases, and its tracked production bundle `main.js`. Source changes that affect the bundle must rebuild and commit `main.js` here.

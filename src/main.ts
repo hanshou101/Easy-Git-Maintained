@@ -819,13 +819,13 @@ export default class EasyGitPlugin extends Plugin {
           );
         }
         if (
-          result.ignoredEmbeddedRepos &&
-          result.ignoredEmbeddedRepos.length > 0 &&
+          result.ignoredSubmodules &&
+          result.ignoredSubmodules.length > 0 &&
           this.settings.showNotifications
         ) {
           new Notice(
-            `Easy Git (${mapping.name}${label}): ignored ${result.ignoredEmbeddedRepos.length} ` +
-              `embedded git repo(s) (submodule or cloned): ${result.ignoredEmbeddedRepos.join(", ")}`,
+            `Easy Git (${mapping.name}${label}): ignored ${result.ignoredSubmodules.length} ` +
+              `submodule dir(s) declared in .gitmodules: ${result.ignoredSubmodules.join(", ")}`,
           );
         }
         if (

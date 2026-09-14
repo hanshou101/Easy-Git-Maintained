@@ -58,7 +58,7 @@ import {
   splitLinesForMerge,
 } from "./line-endings";
 import { hasHiddenPathSegment } from "./hidden-paths";
-import { findEmbeddedRepoRoots } from "./embedded-repos";
+import { collectDeclaredSubmodules } from "./submodules";
 import { merge as diff3Merge } from "node-diff3";
 
 /** Counts returned by applyPullModify so runOnce can sum them into the
@@ -241,8 +241,8 @@ export class SyncEngine {
     // 3. Read local files (applies wikilink rewrite for .md when enabled).
     const localScan = await this.scanLocalFolder(mapping);
     baseResult.skippedLarge = localScan.skipped;
-    if (localScan.ignoredEmbeddedRepos.length > 0) {
-      baseResult.ignoredEmbeddedRepos = localScan.ignoredEmbeddedRepos;
+    if (localScan.ignoredSubmodules.length > 0) {
+      baseResult.ignoredSubmodules = localScan.ignoredSubmodules;
     }
     if (localScan.rewrittenWikilinks > 0) {
       baseResult.rewrittenWikilinks = localScan.rewrittenWikilinks;
@@ -522,7 +522,7 @@ export class SyncEngine {
     highlightsRewritten: number;
     mathMacrosRewritten: number;
     excludePatterns: string[];
-    ignoredEmbeddedRepos: string[];
+    ignoredSubmodules: string[];
   }> {
     const isWholeVault = isVaultRoot(mapping.vaultFolder);
     let folder: TFolder | null;
@@ -570,29 +570,38 @@ export class SyncEngine {
       ...this.deps.settings.excludedPaths,
       ...localIgnore,
     ];
-    // Embedded git repositories under the mapping folder — declared
-    // submodules, manually cloned repos, linked worktrees — are gitlink
-    // boundaries (mode 160000): git records the folder itself and never
-    // tracks the files inside. Easy Git uploads file blobs and cannot
-    // represent gitlinks, so without this their whole working tree AND
-    // `.git` internals get scanned as parent-repo content (huge uploads,
-    // then failures on pack files). Exclude their subtrees on both sides:
-    // the patterns are honoured by the file walk below, the hidden-path
-    // augmentation, and the remote-path filter in runOnce.
-    const ignoredEmbeddedRepos = await findEmbeddedRepoRoots(
-      childTFolders(folder),
+    // Submodule exclusion is driven by `.gitmodules`, NOT by `.git`
+    // presence: a folder with a `.git` entry — including the mapping
+    // root itself, and submodule dirs the user pulled by hand with git
+    // CLI — stays a normal sync target through its own mapping. Only
+    // the submodule directories DECLARED in the `.gitmodules` of a
+    // repo at or below the mapping folder are invisible to this
+    // mapping's sync. The patterns are honoured by the file walk
+    // below, the hidden-path augmentation, and the remote-path filter
+    // in runOnce.
+    const ignoredSubmodules = await collectDeclaredSubmodules(
+      folder,
       (node) => childTFolders(node),
       (p) => this.hasGitEntry(p),
+      async (repoRoot) => {
+        try {
+          return await this.deps.app.vault.adapter.read(
+            normalizePath(`${repoRoot}/.gitmodules`),
+          );
+        } catch {
+          return "";
+        }
+      },
     );
-    for (const repoRoot of ignoredEmbeddedRepos) {
-      excludePatterns.push(`${repoRoot}/**`);
-      // The remote-path filter matches repo-relative paths, so the
-      // mapping-relative form is needed too when the mapping folder is
-      // not the vault root. Vault-absolute covers TFolder paths and
-      // vaultPathFor reconstruction.
-      const repoRootRel = relativeTo(mapping.vaultFolder, repoRoot);
-      if (repoRootRel && repoRootRel !== repoRoot) {
-        excludePatterns.push(`${repoRootRel}/**`);
+    for (const sub of ignoredSubmodules) {
+      excludePatterns.push(`${sub}/**`);
+      // The remote-path filter matches mapping-relative paths, so that
+      // form is needed too when the mapping folder is not the vault
+      // root. Vault-absolute covers TFolder paths and vaultPathFor
+      // reconstruction.
+      const subRel = relativeTo(mapping.vaultFolder, sub);
+      if (subRel && subRel !== sub) {
+        excludePatterns.push(`${subRel}/**`);
       }
     }
     const maxBytes = this.deps.settings.maxFileSizeBytes;
@@ -717,8 +726,8 @@ export class SyncEngine {
       calloutsRewritten,
       highlightsRewritten,
       mathMacrosRewritten,
+      ignoredSubmodules,
       excludePatterns,
-      ignoredEmbeddedRepos,
     };
   }
 
@@ -958,9 +967,10 @@ export class SyncEngine {
   }
 
   /**
-   * True when `folderPath` contains a `.git` entry — directory (manual
-   * clone) or file (submodule/worktree gitlink pointer). Either form
-   * marks the folder as an embedded repository boundary.
+   * True when `folderPath` contains a `.git` entry — directory (git
+   * clone) or file (gitlink pointer written by `git submodule` /
+   * `git worktree`). Either form marks the folder as a git repository
+   * whose `.gitmodules` may declare submodule boundaries.
    */
   private async hasGitEntry(folderPath: string): Promise<boolean> {
     try {
@@ -1023,14 +1033,10 @@ export class SyncEngine {
           !isExcluded(relativeFolder, excludePatterns) &&
           !seenFolders.has(hiddenFolder)
         ) {
-          // Never descend into `.git` itself, or into a hidden folder that
-          // is an embedded git repo (submodule/manual clone invisible to
-          // the TFolder walk): git does not track their contents as
-          // parent-repo files.
-          if (
-            hiddenFolder.substring(hiddenFolder.lastIndexOf("/") + 1) === ".git" ||
-            (await this.hasGitEntry(hiddenFolder))
-          ) {
+          // Never descend into `.git` itself: git metadata (objects,
+          // packs, refs) is repo plumbing, never content. Declared
+          // submodule dirs are already excluded via excludePatterns.
+          if (hiddenFolder.substring(hiddenFolder.lastIndexOf("/") + 1) === ".git") {
             continue;
           }
           seenFolders.add(hiddenFolder);

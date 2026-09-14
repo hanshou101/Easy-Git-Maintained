@@ -9,6 +9,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test:crlf": "node scripts/crlf-regression.mjs",
     "test:hidden": "node scripts/hidden-path-regression.mjs",
+    "test:submodule": "node scripts/submodule-regression.mjs",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
   "keywords": [

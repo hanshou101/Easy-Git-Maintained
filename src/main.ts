@@ -819,6 +819,16 @@ export default class EasyGitPlugin extends Plugin {
           );
         }
         if (
+          result.ignoredEmbeddedRepos &&
+          result.ignoredEmbeddedRepos.length > 0 &&
+          this.settings.showNotifications
+        ) {
+          new Notice(
+            `Easy Git (${mapping.name}${label}): ignored ${result.ignoredEmbeddedRepos.length} ` +
+              `embedded git repo(s) (submodule or cloned): ${result.ignoredEmbeddedRepos.join(", ")}`,
+          );
+        }
+        if (
           result.unresolvedWikilinks &&
           result.unresolvedWikilinks > 0 &&
           this.settings.showNotifications

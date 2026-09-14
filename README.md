@@ -258,6 +258,8 @@ Drop a `.easygitignore` file at the root of any mapping's vault folder and its p
 
 Easy Git supplements Obsidian's vault index with the low-level adapter so hidden paths such as `.gitignore`, `.github/**`, and `.claude/**` can participate in sync. Safety exclusions still apply: `.git/**`, the vault config directory, `.trash/**`, and `.easy-git-backup/**` remain excluded by default. Existing installations may still have `.claude/**` stored in their editable **Excluded paths** list from an older default; remove that entry manually if you want to sync the directory.
 
+Embedded git repositories are always excluded. If a folder inside a mapping contains its own `.git` entry — a declared submodule checked out by hand, a manually cloned repo, or a linked worktree — git tracks that folder as a single gitlink (mode 160000) and never reads its contents, so Easy Git treats the whole folder as a boundary: neither its working-tree files nor its `.git` internals are scanned, pushed, or pulled, on any mapping direction. Sync completes with a notice listing the ignored roots (e.g. `Multica平台产物导出`) instead of timing out on thousands of sub-repo blobs. Parent-repo files such as `.gitmodules` itself still sync normally.
+
 ## Sync log
 
 Every sync run is recorded in an in-Obsidian log so you can see exactly what happened on each mapping without opening the developer console. Open it via:

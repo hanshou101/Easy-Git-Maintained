@@ -220,6 +220,11 @@ export interface SyncResult {
   error?: string;
   durationMs: number;
   skippedLarge?: string[];
+  /** Vault-relative roots of embedded git repositories (declared
+   * submodules, manually cloned repos, linked worktrees) detected under
+   * the mapping folder this run. Git tracks them as gitlinks, never as
+   * files, so Easy Git excludes their contents on both sides. */
+  ignoredEmbeddedRepos?: string[];
   noopReason?: string;
   /** Number of wikilinks that could not be resolved at push time. */
   unresolvedWikilinks?: number;

@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import esbuild from "esbuild";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { build } from "vite";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ENTRY = "\0crlf-regression.ts";
 
 const testSource = `
 import assert from "node:assert/strict";
@@ -286,21 +291,43 @@ assert.deepEqual(
 );
 `;
 
-const result = await esbuild.build({
-  stdin: {
-    contents: testSource,
-    resolveDir: process.cwd(),
-    sourcefile: "crlf-regression.ts",
-    loader: "ts",
+// Bundle the test source (a virtual TypeScript entry whose "./src/..." imports resolve against the repo root) with
+// Vite in SSR mode, so Node built-ins stay external and every dependency is inlined, then run it from memory.
+const result = await build({
+  configFile: false,
+  root: repoRoot,
+  publicDir: false,
+  logLevel: "warn",
+  ssr: { noExternal: true },
+  plugins: [
+    {
+      name: "crlf-regression-entry",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (source === ENTRY) return ENTRY;
+        if (importer === ENTRY && source.startsWith("./")) {
+          return this.resolve(path.join(repoRoot, source), undefined, { skipSelf: true });
+        }
+        return null;
+      },
+      load: (id) => (id === ENTRY ? testSource : null),
+    },
+  ],
+  build: {
+    ssr: true,
+    write: false,
+    emptyOutDir: false,
+    copyPublicDir: false,
+    target: "node20",
+    minify: false,
+    reportCompressedSize: false,
+    rolldownOptions: { input: ENTRY, output: { format: "esm", codeSplitting: false } },
   },
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node20",
-  write: false,
 });
 
-assert.equal(result.outputFiles.length, 1);
-const encoded = Buffer.from(result.outputFiles[0].contents).toString("base64");
+const output = (Array.isArray(result) ? result : [result]).flatMap((entry) => entry.output);
+assert.equal(output.length, 1);
+assert.equal(output[0].type, "chunk");
+const encoded = Buffer.from(output[0].code).toString("base64");
 await import(`data:text/javascript;base64,${encoded}`);
 console.log("CRLF regression checks passed");

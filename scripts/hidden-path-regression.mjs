@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import esbuild from "esbuild";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { build } from "vite";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ENTRY = "\0hidden-path-regression.ts";
+const OBSIDIAN_STUB = "\0obsidian-stub";
 
 const testSource = `
 import assert from "node:assert/strict";
@@ -258,29 +264,35 @@ assert.deepEqual(adapter.trashed, [".renamed-gitignore"]);
 assert.equal(adapter.files.has(".renamed-gitignore"), false);
 `;
 
-const result = await esbuild.build({
-  stdin: {
-    contents: testSource,
-    resolveDir: process.cwd(),
-    sourcefile: "hidden-path-regression.ts",
-    loader: "ts",
-  },
-  bundle: true,
-  platform: "node",
-  format: "esm",
-  target: "node20",
-  write: false,
+// Bundle the test source (a virtual TypeScript entry whose "./src/..." imports resolve against the repo root) with
+// Vite in SSR mode, so Node built-ins stay external and every dependency is inlined, then run it from memory.
+// `obsidian` is replaced by a small stub module because the real package only exists inside Obsidian.
+const result = await build({
+  configFile: false,
+  root: repoRoot,
+  publicDir: false,
+  logLevel: "warn",
+  ssr: { noExternal: true },
   plugins: [
     {
+      name: "hidden-path-regression-entry",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (source === ENTRY) return ENTRY;
+        if (importer === ENTRY && source.startsWith("./")) {
+          return this.resolve(path.join(repoRoot, source), undefined, { skipSelf: true });
+        }
+        return null;
+      },
+      load: (id) => (id === ENTRY ? testSource : null),
+    },
+    {
       name: "obsidian-stub",
-      setup(build) {
-        build.onResolve({ filter: /^obsidian$/ }, () => ({
-          path: "obsidian",
-          namespace: "obsidian-stub",
-        }));
-        build.onLoad({ filter: /.*/, namespace: "obsidian-stub" }, () => ({
-          loader: "js",
-          contents: `
+      enforce: "pre",
+      resolveId: (source) => (source === "obsidian" ? OBSIDIAN_STUB : null),
+      load: (id) =>
+        id === OBSIDIAN_STUB
+          ? `
             export class TFolder {
               constructor(path = "") { this.path = path; this.children = []; }
             }
@@ -303,14 +315,25 @@ const result = await esbuild.build({
                 }),
               };
             }
-          `,
-        }));
-      },
+          `
+          : null,
     },
   ],
+  build: {
+    ssr: true,
+    write: false,
+    emptyOutDir: false,
+    copyPublicDir: false,
+    target: "node20",
+    minify: false,
+    reportCompressedSize: false,
+    rolldownOptions: { input: ENTRY, output: { format: "esm", codeSplitting: false } },
+  },
 });
 
-assert.equal(result.outputFiles.length, 1);
-const encoded = Buffer.from(result.outputFiles[0].contents).toString("base64");
+const output = (Array.isArray(result) ? result : [result]).flatMap((entry) => entry.output);
+assert.equal(output.length, 1);
+assert.equal(output[0].type, "chunk");
+const encoded = Buffer.from(output[0].code).toString("base64");
 await import(`data:text/javascript;base64,${encoded}`);
 console.log("Hidden-path regression checks passed");

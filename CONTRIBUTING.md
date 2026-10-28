@@ -10,7 +10,7 @@ For general "is this how it's supposed to work?" questions, the Obsidian forum o
 
 ## Setting up the dev environment
 
-You need Node 20+ and npm. Clone the repo, install, and build:
+You need Node 20.19+ (or 22.12+, which is what Vite 8 requires) and npm. Clone the repo, install, and build:
 
 ```sh
 git clone https://github.com/Saiki77/Easy-Git.git
@@ -19,7 +19,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` runs esbuild in watch mode, producing `main.js` at the repo root. `npm run build` does a one-shot type-check + production bundle.
+`npm run dev` runs Vite in watch mode (`vite build --watch --mode development`), producing an unminified `main.js` with an inline source map at the repo root. `npm run build` does a one-shot type-check + production bundle (`tsc --noEmit && vite build`: minified, no source map). Bundling is configured in `vite.config.mjs`; Vite prints a `build.outDir must not be the same directory of root` warning on every build, which is expected because the plugin root is the output directory and `emptyOutDir` is off.
 
 ## Testing in a real vault
 

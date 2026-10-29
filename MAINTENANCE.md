@@ -8,6 +8,27 @@ This repository is an independent, long-lived maintained edition of Easy Git.
 - `upstream`: `https://github.com/Saiki77/Easy-Git.git` — a read-only reference for reviewing changes from the original project.
 - A separate GitHub fork may be used only when contributing selected changes back upstream. Upstream pull requests never gate this repository's releases or merges.
 
+## Upstream base
+
+| | |
+|---|---|
+| Upstream repository | `https://github.com/Saiki77/Easy-Git` |
+| Base release | 1.7.2 (upstream tag `1.7.2`) |
+| Base commit | `2a08f0cff4931718f5e4f60b056599375a7d3204` ("chore: release 1.7.2", 2026-07-26) |
+
+`main` contains upstream's history up to the base commit, which is the merge base of `main` and `upstream/main`. This edition's own commits are `git log --oneline 2a08f0cff4931718f5e4f60b056599375a7d3204..main`, and everything it changed is `git diff 2a08f0cff4931718f5e4f60b056599375a7d3204 main`.
+
+To see what upstream has done since the base, diff against the base commit instead of comparing files by hand. Add the upstream remote once (`git remote add upstream https://github.com/Saiki77/Easy-Git.git`), then:
+
+```bash
+git fetch upstream --tags
+git log --oneline 2a08f0cff4931718f5e4f60b056599375a7d3204..upstream/main
+git diff --stat 2a08f0cff4931718f5e4f60b056599375a7d3204 upstream/main
+git diff 2a08f0cff4931718f5e4f60b056599375a7d3204 upstream/main -- <path>
+```
+
+Whenever upstream changes are merged (see "Updating from upstream"), update this table to the new upstream commit in the same pull request, so the recorded base always matches the code. After such a merge, `git merge-base main upstream/main` gives the new base commit.
+
 ## HugeRepo integration
 
 This repository is consumed as `submodules/Easy-Git` by [`hanshou101/Awesome_ObsidianPlugin_HugeRepo`](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo). Before work that can affect builds, releases, the submodule pointer, or installable artifacts, maintainers and agents must also read the HugeRepo [Submodule integration contract](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo/blob/main/SUBMODULE_INTEGRATION.md).
@@ -31,7 +52,7 @@ git switch -c review/upstream-<version> main
 git merge --no-ff upstream/main
 ```
 
-Review the full diff, run the local regression suite, and resolve any conflict in favor of this edition's compatibility and maintenance requirements before opening a pull request into `main`.
+Review the full diff, run the local regression suite, and resolve any conflict in favor of this edition's compatibility and maintenance requirements before opening a pull request into `main`. In the same pull request, update the "Upstream base" table above.
 
 ## Local validation
 

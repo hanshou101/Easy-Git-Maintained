@@ -20,7 +20,7 @@
 
 ## Maintained edition
 
-This is the independently maintained `hanshou101` edition of Easy Git. This repository is the primary source for development, releases, issue fixes, and pull-request merges. It is not downstream-gated by the original repository.
+This is the independently maintained `hanshou101` edition of Easy Git, based on upstream 1.7.2 (commit `2a08f0cff4931718f5e4f60b056599375a7d3204`; see [MAINTENANCE.md](MAINTENANCE.md#upstream-base)). This repository is the primary source for development, releases, issue fixes, and pull-request merges. It is not downstream-gated by the original repository.
 
 The original [`Saiki77/Easy-Git`](https://github.com/Saiki77/Easy-Git) repository is retained as an `upstream` reference. Upstream changes are reviewed and selectively merged when they fit this edition; they are not pulled automatically and do not override local maintenance decisions. See [MAINTENANCE.md](MAINTENANCE.md) for the repository and remote policy.
 

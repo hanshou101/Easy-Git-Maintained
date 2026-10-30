@@ -32,6 +32,11 @@ import {
   secretStorageAvailable,
   writeStoredToken,
 } from "./secret-storage";
+import {
+  UPSTREAM_PLUGIN_ID,
+  readUpstreamSettings,
+  upstreamPluginEnabled,
+} from "./upstream-plugin";
 
 type SyncTrigger = "manual" | "interval" | "startup" | "on-save" | "command";
 
@@ -62,6 +67,11 @@ export default class EasyGitPlugin extends Plugin {
   private pendingAfterSync: Set<string> = new Set();
   private statusBar?: StatusBarIndicator;
   private settingsTab?: EasyGitSettingTab;
+  /**
+   * Easy-Git-Maintained: whether onload() stopped because the upstream plugin
+   * is enabled.
+   */
+  stoppedForUpstream = false;
 
   /** Whether a sync run for this mapping is currently in flight. */
   isSyncing(mappingId: string): boolean {
@@ -69,6 +79,18 @@ export default class EasyGitPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
+    // Easy-Git-Maintained: the upstream plugin would sync the same folders to
+    // the same repositories at the same time, from a sync state of its own.
+    if (upstreamPluginEnabled(this.app, this.manifest)) {
+      this.stoppedForUpstream = true;
+      new Notice(
+        `${this.manifest.name} is not running because the upstream Easy Git plugin (${UPSTREAM_PLUGIN_ID}) is enabled. ` +
+          `Turn off "Easy Git" in Settings → Community plugins, then turn ${this.manifest.name} off and on again.`,
+        0,
+      );
+      return;
+    }
+
     await this.loadSettings();
 
     this.engine = new SyncEngine({
@@ -238,6 +260,7 @@ export default class EasyGitPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     let data: unknown = null;
+    let unreadable = false;
     try {
       data = await this.loadData();
     } catch (e) {
@@ -250,7 +273,16 @@ export default class EasyGitPlugin extends Plugin {
         10_000,
       );
       data = null;
+      unreadable = true;
     }
+    // Easy-Git-Maintained: at its first start in a vault (no data.json of its
+    // own yet), the edition takes over the upstream plugin's settings,
+    // mappings and sync state included. The token comes from the keychain.
+    const imported =
+      data == null && !unreadable
+        ? await readUpstreamSettings(this.app, this.manifest)
+        : null;
+    if (imported) data = imported;
     this.settings = Object.assign(
       {},
       DEFAULT_SETTINGS,
@@ -263,7 +295,12 @@ export default class EasyGitPlugin extends Plugin {
     if (this.hydrateToken()) dirty = true;
     if (this.migrateLegacyMappings()) dirty = true;
     if (this.healSettings()) dirty = true;
-    if (dirty) await this.saveSettings();
+    if (dirty || imported) await this.saveSettings();
+    if (imported) {
+      new Notice(
+        `${this.manifest.name} copied the settings of the upstream Easy Git plugin (${UPSTREAM_PLUGIN_ID}).`,
+      );
+    }
   }
 
   /**

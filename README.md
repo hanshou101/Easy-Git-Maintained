@@ -24,6 +24,23 @@ This is the independently maintained `hanshou101` edition of Easy Git, based on 
 
 The original [`Saiki77/Easy-Git`](https://github.com/Saiki77/Easy-Git) repository is retained as an `upstream` reference. Upstream changes are reviewed and selectively merged when they fit this edition; they are not pulled automatically and do not override local maintenance decisions. See [MAINTENANCE.md](MAINTENANCE.md) for the repository and remote policy.
 
+**Plugin id.** This edition's plugin id is `easy-git-maintained`, and it shows up as **Easy Git (Maintained)**; upstream's id is `easy-git`. Obsidian offers plugin updates by id from its community plugin list, so with the upstream id every upstream release was offered as an update of this edition, and installing it replaced the edition. With an id of its own, Obsidian never offers one, and the two are separate plugins in Settings → Community plugins.
+
+Enable only one of them. While the upstream Easy Git is enabled in a vault, this edition shows a notice and does not run: both would sync the same folders to the same repositories, each from a sync state of its own.
+
+### Switching from Easy Git (`easy-git`)
+
+This also applies to builds of this edition up to 1.7.2, which used the upstream id.
+
+1. Settings → Community plugins: turn **Easy Git** off. Don't uninstall it yet.
+2. Install this edition into `<your vault>/.obsidian/plugins/easy-git-maintained/` (see [Install](#install)) and enable **Easy Git (Maintained)**. At its first start in the vault it copies the upstream plugin's settings: the mappings with their sync state, authentication, exclusions and every other option. A notice says `Easy Git (Maintained) copied the settings of the upstream Easy Git plugin (easy-git).` The next sync goes on from the last sync state; it is not a first sync.
+   - The token stays where it is: both use the same keychain entry, so you are still signed in. (On Obsidian before 1.11.4 the token is in data.json and is copied with it.)
+   - Missed step 1: the edition shows `Easy Git (Maintained) is not running because the upstream Easy Git plugin (easy-git) is enabled.` Turn off Easy Git, then turn Easy Git (Maintained) off and on again.
+3. Hotkeys set for Easy Git commands have to be set again: the command ids are now `easy-git-maintained:*`.
+4. When a sync has worked, uninstall Easy Git.
+
+Copying this edition's three files over the old ones in `.obsidian/plugins/easy-git/` works too. Obsidian then has no `easy-git` plugin anymore; enable **Easy Git (Maintained)** in Community plugins, and it goes on with the `data.json` in that folder.
+
 ## Why
 
 Obsidian's built-in Sync covers your whole vault. Easy Git is for the case where you want to share only one or two folders with a repo: a notes folder you keep public, course material you collaborate on, a snippets section you want backed up under version control. You pick the folder, you pick the repo, you pick the direction. That's it.
@@ -41,18 +58,15 @@ If you'd like Easy Git to reach another host such as GitLab, Bitbucket, or a dif
 
 ## Install
 
-**From inside Obsidian** (recommended)
+This edition is not in Obsidian's community plugin list: **Browse** under Settings → Community plugins finds the upstream Easy Git, not this edition.
 
-1. Settings → Community plugins → **Browse**.
-2. Search **Easy Git** and click **Install**, then **Enable**.
-
-**Via BRAT** (for early-access builds between releases)
+**Via BRAT**
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) plugin.
-2. BRAT settings → **Add Beta Plugin** → paste `hanshou101/Easy-Git-Maintained`.
-3. Enable **Easy Git** under Settings → Community plugins.
+2. BRAT settings → **Add Beta Plugin** → paste `hanshou101/Easy-Git-Maintained`, and select a version (for example `1.7.2-maintained.1`) rather than the latest, so BRAT keeps it pinned.
+3. Enable **Easy Git (Maintained)** under Settings → Community plugins.
 
-**Manual:** download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases) into `<your vault>/.obsidian/plugins/easy-git/`.
+**Manual:** download `main.js`, `manifest.json`, `styles.css` from the [latest release](../../releases) into `<your vault>/.obsidian/plugins/easy-git-maintained/`. The same three files are in `dist/Easy-Git/` of [Awesome_ObsidianPlugin_HugeRepo](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo).
 
 ## Sign in
 

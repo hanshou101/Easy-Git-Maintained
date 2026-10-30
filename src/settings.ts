@@ -665,9 +665,9 @@ export class EasyGitSettingTab extends PluginSettingTab {
   }
 
   private renderAboutSection(parent: HTMLElement): void {
-    const version = this.plugin.manifest.version;
+    const { name, version } = this.plugin.manifest;
     parent.createEl("p", {
-      text: `Easy Git ${version} by Saiki77`,
+      text: `${name} ${version}, the maintained edition of Easy Git by Saiki77`,
       attr: { style: "margin-top:0; color: var(--text-muted);" },
     });
     const links = parent.createDiv({
@@ -678,16 +678,17 @@ export class EasyGitSettingTab extends PluginSettingTab {
       el.setAttr("target", "_blank");
       el.setAttr("rel", "noopener");
     };
-    a("https://github.com/Saiki77/Easy-Git", "Source");
-    a("https://github.com/Saiki77/Easy-Git/issues", "Report an issue");
+    a("https://github.com/hanshou101/Easy-Git-Maintained", "Source");
+    a("https://github.com/hanshou101/Easy-Git-Maintained/issues", "Report an issue");
     a(
-      "https://github.com/Saiki77/Easy-Git/blob/main/README.md",
+      "https://github.com/hanshou101/Easy-Git-Maintained/blob/main/README.md",
       "Documentation",
     );
     a(
-      "https://github.com/Saiki77/Easy-Git/blob/main/LICENSE",
+      "https://github.com/hanshou101/Easy-Git-Maintained/blob/main/LICENSE",
       "License (MIT)",
     );
+    a("https://github.com/Saiki77/Easy-Git", "Upstream Easy Git");
   }
 }
 

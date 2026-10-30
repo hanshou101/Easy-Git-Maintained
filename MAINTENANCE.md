@@ -29,6 +29,20 @@ git diff 2a08f0cff4931718f5e4f60b056599375a7d3204 upstream/main -- <path>
 
 Whenever upstream changes are merged (see "Updating from upstream"), update this table to the new upstream commit in the same pull request, so the recorded base always matches the code. After such a merge, `git merge-base main upstream/main` gives the new base commit.
 
+## Plugin id
+
+| | |
+|---|---|
+| Plugin id | `easy-git-maintained` (`manifest.json`), name "Easy Git (Maintained)" |
+| Upstream id | `easy-git`, also used by this edition up to 1.7.2 |
+| Versions | `<upstream base>-maintained.<n>`, for example `1.7.2-maintained.1` |
+
+Obsidian looks up installed plugin ids in its community plugin list to offer updates. With the upstream id, Obsidian 1.14.5 offered upstream Easy Git 1.9.0 as an update of the installed edition, and installing it would have replaced the edition with the upstream build (AME-1088). Never go back to `easy-git` or any other id in that list.
+
+- `src/upstream-plugin.ts`: while the upstream plugin is installed and enabled in the vault, `onload()` shows a notice that stays and returns before registering anything. At the first start without a `data.json` of its own, `loadSettings()` takes over the upstream `data.json` (mappings with their sync state, auth, exclusions, options) from the upstream plugin's folder and saves it as its own. `scripts/upstream-plugin-regression.mjs` covers both.
+- Kept as upstream on purpose, so that a switch keeps working data: the token secret id `easy-git-token`, the backup folder `.easy-git-backup/`, `.easygitignore`, and the CSS classes. Command ids follow the plugin id (`easy-git-maintained:*`).
+- A release is an annotated tag equal to the manifest version, without `v`, on a merged commit of `main`; `.github/workflows/release.yml` builds, attests and publishes `main.js`, `manifest.json` and `styles.css`. Bump with `npm version <version> --no-git-tag-version`, which also updates `manifest.json` and `versions.json`.
+
 ## HugeRepo integration
 
 This repository is consumed as `submodules/Easy-Git` by [`hanshou101/Awesome_ObsidianPlugin_HugeRepo`](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo). Before work that can affect builds, releases, the submodule pointer, or installable artifacts, maintainers and agents must also read the HugeRepo [Submodule integration contract](https://github.com/hanshou101/Awesome_ObsidianPlugin_HugeRepo/blob/main/SUBMODULE_INTEGRATION.md).
@@ -38,7 +52,7 @@ This repository is consumed as `submodules/Easy-Git` by [`hanshou101/Awesome_Obs
 The repository boundary is deliberate:
 
 - Easy-Git-Maintained owns source, tests, releases, and its tracked production bundle `main.js`. Source changes that affect the bundle must rebuild and commit `main.js` here.
-- After an Easy-Git PR is merged, a separate HugeRepo PR advances `submodules/Easy-Git` to the merged commit and regenerates `dist/Easy-Git/main.js`, `manifest.json`, and `styles.css` with `scripts/update-easy-git-package.mjs`.
+- After an Easy-Git PR is merged, a separate HugeRepo PR advances `submodules/Easy-Git` to the merged commit and regenerates `dist/Easy-Git/main.js`, `manifest.json`, and `styles.css` with `scripts/update-easy-git-package.mjs`. Those files install into `.obsidian/plugins/easy-git-maintained/`, the folder named after the plugin id.
 - The HugeRepo gitlink and `dist/Easy-Git/` changes are delivered together. Do not hand-edit the copied files or publish them from an unmerged Easy-Git branch.
 - An Easy-Git PR remains independently reviewable and mergeable; HugeRepo integration follows the merge and does not replace this repository's own validation.
 
@@ -60,6 +74,8 @@ Review the full diff, run the local regression suite, and resolve any conflict i
 npm ci
 npm run test:crlf
 npm run test:hidden
+npm run test:submodule
+npm run test:upstream
 npm run build
 npm run lint
 git diff --check
